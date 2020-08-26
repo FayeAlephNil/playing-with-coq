@@ -3,6 +3,12 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
+Theorem contrapositive : forall (P Q : Prop), (P -> Q) -> (~Q -> ~P).
+Proof.
+  intros P Q H NQ PP.
+  apply (NQ (H PP)).
+Qed.
+
 Inductive seq : nat -> Set :=
   | niln : seq 0
   | consn : forall n : nat, nat -> seq n -> seq (S n).
@@ -23,7 +29,6 @@ Proof.
   rewrite IHs.
   trivial.
 Qed.
-
 
 Lemma add_succ : forall (n m : nat), n + S m = S (n + m).
 Proof.
@@ -217,6 +222,14 @@ Proof.
   trivial.
 Qed.
 
+Theorem le_succ : forall (n : nat), le n (S n).
+Proof.
+  intro n.
+  exists 1.
+  simpl.
+  trivial.
+Qed.
+
 Theorem le_anti_sym : forall (n m : nat), le n m -> le m n -> n = m.
 Proof.
   intros n m [i Hi] [j Hj].
@@ -265,8 +278,7 @@ Proof.
   exists n.
   rewrite mult_comm.
   simpl.
-  rewrite add_zero.
-  trivial.
+  rewrite add_zero. trivial.
 Qed.
 
 Theorem divides_le : forall (n m : nat), divides n m -> le n m \/ m = 0.
@@ -362,3 +374,179 @@ Theorem prime_not_comp : forall (p : nat), p <> 1 -> prime p <-> ~ composite p.
          apply Mone_neq.
          apply Mp_neq.
 Qed.
+
+Definition less (n m : nat) : Prop := le n m /\ n <> m.
+
+Theorem less_succ : forall (n : nat), less n (S n).
+Proof.
+  intro n. split.
+  apply le_succ.
+  induction n.
+  trivial.
+
+  injection. apply IHn.
+Qed.
+
+Theorem less_zero : forall (n : nat), ~ less n 0.
+Proof.
+  intro n. unfold not. intro P.
+  destruct P as [Ple Pneq].
+  induction n.
+  auto.
+
+  destruct Ple as [k Pk].
+  pose proof (add_zpp Pk) as [Hk HSn].
+  inversion HSn.
+Qed.
+
+Theorem le_ind : forall (n m : nat), le n (S m) -> le n m \/ n = S m.
+Proof.
+  intros n m [k Hk].
+  destruct k.
+  right.
+  simpl in Hk. apply Hk.
+
+  left; exists k.
+  simpl in Hk.
+  injection Hk.
+  trivial.
+Qed.
+
+Theorem le_less : forall (n m : nat), le n m <-> less n (S m).
+Proof.
+  intros n m.
+  split.
+  - intro H.
+    split.
+    -- apply ((le_trans H) (le_succ m)).
+    -- destruct H as [k Hk].
+       destruct k.
+       --- simpl in Hk.
+           rewrite Hk.
+           trivial.
+       --- rewrite add_comm in Hk; simpl in Hk.
+           rewrite -Hk.
+           rewrite -add_succ.
+           rewrite -[n]add_zero.
+           rewrite -add_assoc.
+           simpl.
+           cut (0 <> S (S k)). intro P.
+           pose proof ((decidable_eq (n + 0)) (n + S (S k))) as [Qeq | Qneq].
+           * pose proof (add_elim Qeq) as NQ.
+             exfalso. apply (P NQ).
+           * apply Qneq.
+           * trivial.
+  - intro H.
+    destruct H as [Hle Hneq].
+    pose proof (le_ind Hle) as [Hlem | Heq].
+    -- apply Hlem.
+    -- exfalso. apply (Hneq Heq).
+Qed.
+
+Theorem less_trans : forall (n m k : nat), less n m -> less m k -> less n k.
+Proof.
+  intros n m k P Q.
+  destruct m.
+  - exfalso. apply (less_zero P).
+  - destruct k.
+    exfalso; apply (less_zero Q).
+    apply le_less in P.
+    apply le_less in Q.
+    pose proof (le_succ m) as H.
+    pose proof ((le_trans P) H) as A.
+    pose proof ((le_trans A) Q) as J.
+    apply le_less in J.
+    apply J.
+Qed.
+
+Theorem succ_neq : forall (n m k : nat), n <> 0 -> n + m = k -> m <> k.
+Proof.
+  intros n m k H P.
+  pose proof (decidable_eq m k) as [Qeq | Qneq].
+  - rewrite -[k]add_zero in P.
+    rewrite add_comm in P.
+    rewrite Qeq in P.
+    apply add_elim in P.
+    exfalso.
+    apply (H P).
+  - apply Qneq.
+Qed.
+
+Theorem less_ind : forall (n m : nat), less n (S m) -> less n m \/ n = m.
+Proof.
+  intros n m [Hle Hneq].
+  apply le_ind in Hle.
+  destruct Hle as [[k Hk] | Hle_eq].
+  - destruct k.
+    -- simpl in Hk. right. apply Hk.
+    -- cut (S k <> 0). intro A.
+       pose proof ((succ_neq A) Hk) as Q.
+       left.
+       split.
+       * exists (S k). apply Hk.
+       * apply Q.
+       * auto.
+  - exfalso. apply (Hneq Hle_eq).
+Qed.
+
+Theorem le_def : forall (n m : nat), le n m <-> less n m \/ n = m.
+Proof.
+  intros n m.
+  split.
+  intro P.
+  apply le_less in P.
+  apply less_ind.
+  apply P.
+  intro Q.
+  destruct Q as [Qless | Qeq].
+  - pose proof (less_succ m) as H.
+    pose proof ((less_trans Qless) H) as K.
+    apply le_less in K.
+    apply K.
+  - rewrite Qeq.
+    apply (le_refl m).
+Qed.
+
+
+Theorem strong_ind : forall (P : nat -> Prop), (forall (n : nat), (forall (k : nat), less k n -> P k) -> P n) -> (forall (n : nat), P n).
+Proof.
+  intros P H n.
+  cut (forall (m j : nat), le j m -> P j).
+  * intro A.
+    pose proof (le_refl n) as RefN.
+    pose proof ((A n) n) as AN.
+    apply (AN RefN).
+  * intro m.
+    induction m.
+
+    ** intro j; intro Q.
+       apply le_def in Q.
+       destruct Q as [Qless | Qeq].
+       - exfalso. apply (less_zero Qless).
+       - cut (forall (k : nat), less k 0 -> P k).
+         -- intro A.
+            rewrite Qeq.
+            apply ((H 0) A).
+         -- intros k K. exfalso. apply (less_zero K).
+    ** intros j LEJ.
+       apply le_def in LEJ.
+       destruct LEJ as [LEJ_less | LEJ_eq].
+       - apply le_less in LEJ_less.
+         apply ((IHm j) LEJ_less).
+       - rewrite LEJ_eq.
+         cut (forall (k : nat), less k (S m) -> P k).
+         -- intro L.
+            apply ((H (S m)) L).
+         -- intros k K.
+            apply le_less in K.
+            apply le_def in K.
+            destruct K as [K_less | K_eq].
+            --- pose proof (less_succ m) as A.
+                pose proof ((less_trans K_less) A) as K_le.
+                apply le_less in K_le.
+                apply ((IHm k) K_le).
+            --- pose proof (le_refl m) as A.
+                rewrite K_eq.
+                apply ((IHm m) A).
+Qed.
+
